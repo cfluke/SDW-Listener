@@ -117,7 +117,7 @@ string runApplicationResizeReposition(runningApplication &app)
 
         if (error == -1)
         {
-            errorCode = "Program execution failed";  //useless errorcode, child will exit soon after, parent has no knowledge
+            errorCode = "Program execution failed";
         }
         else
         {
@@ -141,6 +141,7 @@ string runApplicationResizeReposition(runningApplication &app)
         // cout << "Parent PID: " << getpid() << endl;
         // cout << "Child from within Parent PID: " << pid << endl;
         // newlyLaunchedProcessPid = getppid();
+        app.applicationProcessId = pid;
         newlyLaunchedProcessPid = pid;
         sprintf(newlyLaunchedProcessPidAsString, "%d", newlyLaunchedProcessPid);
 
@@ -217,6 +218,7 @@ string runApplicationResizeReposition(runningApplication &app)
 
 int main()
 {
+
     // Create a socket
     int listening = socket(AF_INET, SOCK_STREAM, 0);
     string terminal, terminalName;
@@ -225,103 +227,150 @@ int main()
     terminal = "gnome-terminal";
     terminalName = "osboxes@osboxes:~/Desktop/dev";
 
+
+    int PORT = 8000;
+    string ipAddress = "192.168.1.1";
+    while(true) {
+
+    int status, valread, client_fd;
+    struct sockaddr_in serv_addr;
+    string hello = "Hello from client";
+
+    char buffer[1024] = { 0 };
+    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+  
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+  
+    // Convert IPv4 and IPv6 addresses from text to binary
+    // form
+    if (inet_pton(AF_INET, ipAddress.c_str(), &serv_addr.sin_addr)
+        <= 0) {
+        printf(
+            "\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+  
+    if ((status
+         = connect(client_fd, (struct sockaddr*)&serv_addr,
+                   sizeof(serv_addr)))
+        < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+    send(client_fd, hello.c_str(), strlen(hello.c_str()), 0);
+    printf("Hello message sent\n");
+    valread = read(client_fd, buffer, 1024);
+
+    cout << "Buff: " << buffer << endl;
+    // closing the connected socket
+    close(client_fd);   
+}
+
+
+
+    /*
+
     // Establish Socket
-    /*
-         int listening = socket(AF_INET, SOCK_STREAM, 0);
-        if (listening == -1)
+    if (listening == -1)
+    {
+        errorCode = "error creating a socket";
+    }
+
+    // bind ip address (any) and port number to socket.
+
+    sockaddr_in hint;
+    hint.sin_family = AF_INET;
+    hint.sin_port = htons(54000); // Port 54000
+    inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
+
+    bind(listening, (sockaddr *)&hint, sizeof(hint));
+
+    // tells socket to listen for messages with length up to max length
+    listen(listening, SOMAXCONN);
+
+    sockaddr_in client;
+    socklen_t clientSize = sizeof(client);
+
+    int clientSocket = accept(listening, (sockaddr *)&client, &clientSize);
+
+    char host[NI_MAXHOST];    // Client's remote name
+    char service[NI_MAXSERV]; // Service (i.e. port) the client is connect on
+
+    memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
+    memset(service, 0, NI_MAXSERV);
+
+    if (getnameinfo((sockaddr *)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0)
+    {
+        cout << host << " connected on port " << service << endl;
+    }
+    else
+    {
+        inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
+        cout << host << " connected on port " << ntohs(client.sin_port) << endl;
+    }
+
+    close(listening);
+
+    // While loop: accept and echo message back to client
+    char buf[4096];
+
+    while (true)
+    {
+        memset(buf, 0, 4096);
+
+        // Wait for client to send data
+        int bytesReceived = recv(clientSocket, buf, 4096, 0);
+        if (bytesReceived == -1)
         {
-            errorCode = "error creating a socket";
+            cerr << "Error in receiving" << endl;
+            //  break;
         }
 
-        //bind ip address (any) and port number to socket.
-
-        sockaddr_in hint;
-        hint.sin_family = AF_INET;
-        hint.sin_port = htons(54000); //Port 54000
-        inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
-
-        bind(listening, (sockaddr*)&hint, sizeof(hint));
-
-        //tells socket to listen for messages with length up to max length
-        listen(listening, SOMAXCONN);
-
-        sockaddr_in client;
-        socklen_t clientSize = sizeof(client);
-
-        int clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
-
-        char host[NI_MAXHOST];      // Client's remote name
-        char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
-
-        memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
-        memset(service, 0, NI_MAXSERV);
-
-         if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0)
+        if (bytesReceived == 0)
         {
-            cout << host << " connected on port " << service << endl;
-        }
-        else
-        {
-            inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
-            cout << host << " connected on port " << ntohs(client.sin_port) << endl;
+            cout << "Client has been disconnected" << endl;
+            //  break;
         }
 
-        close(listening);
+        cout << "Received Message: " << string(buf, 0, bytesReceived) << endl;
+        recievedString = string(buf, 0, bytesReceived);
 
-        // While loop: accept and echo message back to client
-        char buf[4096];
+        runningApplication appD;
 
-        while (true)
-        {
-            memset(buf, 0, 4096);
+        string prog1 = "/usr/bin/firefox";
+        string prog2 = "/usr/bin/gnome-calculator";
+        string prog3 = "/usr/bin/gnome-clocks";
+        // prog = "/usr/bin/gnome-terminal";
 
-            // Wait for client to send data
-            int bytesReceived = recv(clientSocket, buf, 4096, 0);
-            if (bytesReceived == -1)
-            {
-                cerr << "Error in receiving" << endl;
-              //  break;
-            }
+        //string recievedString = "{ \"messageType\": \"runApplicationAndSetSizeAndPosition\", \"requestingProcess\": \"processName\", \"requestingComputer\": \"computerName\", \"payload\": { \"applicationPath\": \"/usr/bin/gnome-calculator\", \"positionX\" : 100,\"positionY\" : 100, \"windowHeight\" : 600, \"windowWidth\" : 600}}";
 
-            if (bytesReceived == 0)
-            {
-                cout << "Client has been disconnected" << endl;
-              //  break;
-            }
+        parseJSONMessage(recievedString, errorCode, appD);
+        /*
+        cout << "parsed app path: " << appD.applicationPath << endl;
 
-            cout << "Received Message: " << string(buf, 0, bytesReceived) << endl;
-            recievedString = string(buf, 0, bytesReceived);
-            */
-    runningApplication appD;
+        cout << "parsed app x coord: " << appD.applicationLocationX << endl;
+        cout << "parsed app y coord: " << appD.applicationLocationY << endl;
 
-    string prog1 = "/usr/bin/firefox";
-    string prog2 = "/usr/bin/gnome-calculator";
-    string prog3 = "/usr/bin/gnome-clocks";
-    // prog = "/usr/bin/gnome-terminal";
+        cout << "parsed app height: " << appD.applicationSizeHeight << endl;
+        cout << "parsed app width: " << appD.applicationSizeWidth << endl;
+        */ /*
 
-    string sampleMsg = "{ \"messageType\": \"runApplicationAndSetSizeAndPosition\", \"requestingProcess\": \"processName\", \"requestingComputer\": \"computerName\", \"payload\": { \"applicationPath\": \"/usr/bin/gnome-calculator\", \"positionX\" : 100,\"positionY\" : 100, \"windowHeight\" : 600, \"windowWidth\" : 600}}";
 
-    parseJSONMessage(sampleMsg, errorCode, appD);
-    /*
-    cout << "parsed app path: " << appD.applicationPath << endl;
+        errorCode = runApplicationResizeReposition(appD);
+        cout << "error code: " << errorCode << endl;
 
-    cout << "parsed app x coord: " << appD.applicationLocationX << endl;
-    cout << "parsed app y coord: " << appD.applicationLocationY << endl;
-
-    cout << "parsed app height: " << appD.applicationSizeHeight << endl;
-    cout << "parsed app width: " << appD.applicationSizeWidth << endl;
-    */
-
-    errorCode = runApplicationResizeReposition(appD);
-    cout << "error code: " << errorCode << endl;
-
-    // Echo message back to client
-    // send(clientSocket, buf, bytesReceived + 1, 0);
-
-    // }
+        // Echo message back to client
+        send(clientSocket, buf, bytesReceived + 1, 0);
+    }
 
     // Close the socket
-    // close(clientSocket);
+    close(clientSocket);
+
+    */
 
     return 0;
 }
