@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ctime>
 #include <sys/types.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <errno.h>
 
@@ -18,6 +19,9 @@
 using json = nlohmann::json;
 using namespace std;
 
+#define START_APP 4
+#define KILL_APP 5
+
 struct runningApplication
 {
     std::string applicationPath;
@@ -26,21 +30,19 @@ struct runningApplication
     string windowId;
     pid_t applicationProcessId;
 };
-
+// JSON message format
 /*
 JSON MSG format
 
 "{
   "messageType": "runApplicationAndSetSizeAndPosition",
-  "requestingProcess": processName,
-  "requestingComputer": computerName,
   "payload":
     {
-        applicationPath: "appPath",
-        positionX: "xCoordinate",
-        positionY: "yCoordinate",
-        windowHeight: "height",
-        windowWidth: "width"
+        "path": "appPath",
+        "x": "xCoordinate",
+        "y": "yCoordinate",
+        "w": "width",
+        "h": "height"
     }
 }"
 
@@ -52,11 +54,11 @@ void parseJSONMessage(string msgFromMasterApp, string &errorCode, runningApplica
 
     tcpMessageAsJSON = json::parse(msgFromMasterApp);
 
-    app.applicationPath = tcpMessageAsJSON["payload"]["applicationPath"];
-    app.applicationLocationX = tcpMessageAsJSON["payload"]["positionX"];
-    app.applicationLocationY = tcpMessageAsJSON["payload"]["positionY"];
-    app.applicationSizeHeight = tcpMessageAsJSON["payload"]["windowHeight"];
-    app.applicationSizeWidth = tcpMessageAsJSON["payload"]["windowWidth"];
+    app.applicationPath = tcpMessageAsJSON["path"];
+    app.applicationLocationX = tcpMessageAsJSON["x"];
+    app.applicationLocationY = tcpMessageAsJSON["y"];
+    app.applicationSizeHeight = tcpMessageAsJSON["w"];
+    app.applicationSizeWidth = tcpMessageAsJSON["h"];
 }
 
 string executeCommand(string command)
@@ -97,11 +99,6 @@ string runApplicationResizeReposition(runningApplication &app)
     char commandFinal[50];
 
     int error = 0;
-
-    string delimiter = ";";
-
-    size_t pos = 0;
-    string token;
 
     sprintf(programSizeWidth, "%d", app.applicationSizeWidth);
     sprintf(programSizeHeight, "%d", app.applicationSizeHeight);
@@ -216,8 +213,19 @@ string runApplicationResizeReposition(runningApplication &app)
     return errorCode;
 }
 
-int main()
+// Main function for Production
+/*
+int main(int argc, char *argv[])
 {
+    if (argc != 4)
+    {
+        std::cerr << "Usage: " << argv[0] << " <server_ip> <server_port> <client_id>" << std::endl;
+        return 1;
+    }
+
+    const char *serverIP = argv[1];
+    int serverPort = std::atoi(argv[2]);
+    const char *clientID = argv[3];
 
     // Create a socket
     int listening = socket(AF_INET, SOCK_STREAM, 0);
@@ -227,150 +235,261 @@ int main()
     terminal = "gnome-terminal";
     terminalName = "osboxes@osboxes:~/Desktop/dev";
 
-
-    int PORT = 8000;
-    string ipAddress = "192.168.1.1";
-    while(true) {
-
     int status, valread, client_fd;
     struct sockaddr_in serv_addr;
-    string hello = "Hello from client";
+    // string hello = "Hello from client";
 
-    char buffer[1024] = { 0 };
-    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    vector<runningApplication> vectorOfRunningApps;
+
+    char buffer[1024] = {0};
+    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
         printf("\n Socket creation error \n");
         return -1;
     }
-  
+
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-  
+    serv_addr.sin_port = htons(serverPort);
+
     // Convert IPv4 and IPv6 addresses from text to binary
     // form
-    if (inet_pton(AF_INET, ipAddress.c_str(), &serv_addr.sin_addr)
-        <= 0) {
+    if (inet_pton(AF_INET, serverIP, &serv_addr.sin_addr) <= 0)
+    {
         printf(
             "\nInvalid address/ Address not supported \n");
         return -1;
     }
-  
-    if ((status
-         = connect(client_fd, (struct sockaddr*)&serv_addr,
-                   sizeof(serv_addr)))
-        < 0) {
+
+    if ((status = connect(client_fd, (struct sockaddr *)&serv_addr,
+                          sizeof(serv_addr))) < 0)
+    {
         printf("\nConnection Failed \n");
         return -1;
     }
-    send(client_fd, hello.c_str(), strlen(hello.c_str()), 0);
-    printf("Hello message sent\n");
-    valread = read(client_fd, buffer, 1024);
 
-    cout << "Buff: " << buffer << endl;
-    // closing the connected socket
-    close(client_fd);   
-}
-
-
-
-    /*
-
-    // Establish Socket
-    if (listening == -1)
+    // Wait for first 4 bytes of 'RequestIdentify' message
+    char lengthBuffer[4];
+    if (recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0) <= 0)
     {
-        errorCode = "error creating a socket";
+        perror("Error receiving message length");
+        close(client_fd);
+        return 1;
     }
 
-    // bind ip address (any) and port number to socket.
-
-    sockaddr_in hint;
-    hint.sin_family = AF_INET;
-    hint.sin_port = htons(54000); // Port 54000
-    inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
-
-    bind(listening, (sockaddr *)&hint, sizeof(hint));
-
-    // tells socket to listen for messages with length up to max length
-    listen(listening, SOMAXCONN);
-
-    sockaddr_in client;
-    socklen_t clientSize = sizeof(client);
-
-    int clientSocket = accept(listening, (sockaddr *)&client, &clientSize);
-
-    char host[NI_MAXHOST];    // Client's remote name
-    char service[NI_MAXSERV]; // Service (i.e. port) the client is connect on
-
-    memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
-    memset(service, 0, NI_MAXSERV);
-
-    if (getnameinfo((sockaddr *)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0)
+    // Fetch rest of 'RequestIdentify' message
+    int messageLength = *(int *)lengthBuffer;
+    char *messageBuffer = new char[messageLength + 1];
+    if (recv(client_fd, messageBuffer, messageLength, 0) <= 0)
     {
-        cout << host << " connected on port " << service << endl;
+        perror("Error receiving message");
+        close(client_fd);
+        delete[] messageBuffer;
+        return 1;
     }
-    else
+    messageBuffer[messageLength] = '\0';
+
+    // Parse JSON message
+    try
     {
-        inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
-        cout << host << " connected on port " << ntohs(client.sin_port) << endl;
+        json root = json::parse(messageBuffer);
+
+        // Check if it's a 'RequestIdentify' message
+        if (root["messageType"] == 2)
+        {
+            // Construct 'Identify' message
+            json message;
+            message["messageType"] = 0;
+            message["payload"] = clientID;
+            std::string messageStr = message.dump();
+
+            // convert length of message from int to 4 bytes
+            int n = messageStr.size();
+            unsigned char bytes[4];
+            bytes[0] = (n >> 24) & 0xFF;
+            bytes[1] = (n >> 16) & 0xFF;
+            bytes[2] = (n >> 8) & 0xFF;
+            bytes[3] = n & 0xFF;
+
+            // append length to start of message
+            messageStr.insert(0, reinterpret_cast<const char *>(bytes), sizeof(bytes));
+            std::cout << messageStr << std::endl;
+
+            // Send message
+            if (send(client_fd, messageStr.c_str(), messageStr.length(), 0) == -1)
+            {
+                perror("Error sending message");
+                close(client_fd);
+                return 1;
+            }
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error parsing JSON message: " << e.what() << std::endl;
+        close(client_fd);
+        delete[] messageBuffer;
+        return 1;
     }
 
-    close(listening);
-
-    // While loop: accept and echo message back to client
-    char buf[4096];
-
+    // Continuously listen for messages
     while (true)
     {
-        memset(buf, 0, 4096);
-
-        // Wait for client to send data
-        int bytesReceived = recv(clientSocket, buf, 4096, 0);
-        if (bytesReceived == -1)
+        // Receive data
+        char lengthBuffer[4];
+        if (recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0) <= 0)
         {
-            cerr << "Error in receiving" << endl;
-            //  break;
+            perror("Error receiving message length");
+            close(client_fd);
+            return 1;
         }
 
-        if (bytesReceived == 0)
+        int messageLength = *(int *)lengthBuffer;
+        char *messageBuffer = new char[messageLength + 1];
+        if (recv(client_fd, messageBuffer, messageLength, 0) <= 0)
         {
-            cout << "Client has been disconnected" << endl;
-            //  break;
+            perror("Error receiving message");
+            close(client_fd);
+            delete[] messageBuffer;
+            return 1;
+        }
+        messageBuffer[messageLength] = '\0';
+
+        // Parse JSON message
+        try
+        {
+            json message = json::parse(messageBuffer);
+
+            // Check if it's a 'StartApp' message
+            if (message["messageType"] == START_APP)
+            {
+                std::string payloadStr = message["payload"];
+
+                runningApplication appD;
+                parseJSONMessage(payloadStr, errorCode, appD);
+                runApplicationResizeReposition(appD);
+
+                vectorOfRunningApps.push_back(appD);
+            }
+            // Handles Kill processes/shurt down apps message from the master app
+            else if (message["messageType"] == KILL_APP)
+            {
+                for (int i = 0; i < vectorOfRunningApps.size(); i++)
+                {
+                    errorCode = kill(vectorOfRunningApps[i].applicationProcessId, SIGTERM);
+                    cout << strerror(errno) << endl;
+                }
+
+                cout << "processes killed" << endl;
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Error parsing JSON message: " << e.what() << std::endl;
         }
 
-        cout << "Received Message: " << string(buf, 0, bytesReceived) << endl;
-        recievedString = string(buf, 0, bytesReceived);
-
-        runningApplication appD;
-
-        string prog1 = "/usr/bin/firefox";
-        string prog2 = "/usr/bin/gnome-calculator";
-        string prog3 = "/usr/bin/gnome-clocks";
-        // prog = "/usr/bin/gnome-terminal";
-
-        //string recievedString = "{ \"messageType\": \"runApplicationAndSetSizeAndPosition\", \"requestingProcess\": \"processName\", \"requestingComputer\": \"computerName\", \"payload\": { \"applicationPath\": \"/usr/bin/gnome-calculator\", \"positionX\" : 100,\"positionY\" : 100, \"windowHeight\" : 600, \"windowWidth\" : 600}}";
-
-        parseJSONMessage(recievedString, errorCode, appD);
-        /*
-        cout << "parsed app path: " << appD.applicationPath << endl;
-
-        cout << "parsed app x coord: " << appD.applicationLocationX << endl;
-        cout << "parsed app y coord: " << appD.applicationLocationY << endl;
-
-        cout << "parsed app height: " << appD.applicationSizeHeight << endl;
-        cout << "parsed app width: " << appD.applicationSizeWidth << endl;
-        */ /*
-
-
-        errorCode = runApplicationResizeReposition(appD);
-        cout << "error code: " << errorCode << endl;
-
-        // Echo message back to client
-        send(clientSocket, buf, bytesReceived + 1, 0);
+        delete[] messageBuffer;
     }
 
-    // Close the socket
-    close(clientSocket);
-
-    */
+    // Clean up
+    close(client_fd);
 
     return 0;
 }
+
+*/
+
+
+// main function for testing solo
+int main()
+
+{
+    string errorCode;
+
+    vector<runningApplication> vectorOfRunningApps;
+
+    json messagesList[6];
+
+    messagesList[0] = {
+        {"messageType", 4},
+        {"payload",
+         {{"path", "/usr/bin/gnome-clocks"},
+          {"x", 000},
+          {"y", 000},
+          {"w", 600},
+          {"h", 600}}}};
+    messagesList[1] = {
+        {"messageType", 4},
+        {"payload",
+         {{"path", "/usr/bin/gnome-calculator"},
+          {"x", 200},
+          {"y", 50},
+          {"w", 400},
+          {"h", 400}}}};
+    messagesList[2] = {
+        {"messageType", 4},
+        {"payload",
+         {{"path", "/usr/bin/gnome-calculator"},
+          {"x", 500},
+          {"y", 100},
+          {"w", 400},
+          {"h", 400}}}};
+    messagesList[3] = {
+        {"messageType", 5},
+        {"payload", ""}};
+    messagesList[4] = {
+        {"messageType", 4},
+        {"payload",
+         {{"path", "/usr/bin/gnome-calculator"},
+          {"x", 500},
+          {"y", 100},
+          {"w", 400},
+          {"h", 400}}}};
+    messagesList[5] = {
+        {"messageType", 5},
+        {"payload", ""}};
+
+    
+    for (int i = 0; i < 6; i++)
+    {
+        // Parse JSON message
+        try
+        {
+            json message = messagesList[i];
+
+            // Check if it's a 'StartApp' message
+            if (message["messageType"] == START_APP)
+            {
+                std::string payloadStr = message["payload"].dump();
+
+                runningApplication appD;
+                parseJSONMessage(payloadStr, errorCode, appD);
+                runApplicationResizeReposition(appD);
+
+                vectorOfRunningApps.push_back(appD);
+            }
+            // Handles Kill processes/shurt down apps message from the master app
+            else if (message["messageType"] == KILL_APP)
+            {
+                for (int i = 0; i < vectorOfRunningApps.size(); i++)
+                {
+                    errorCode = kill(vectorOfRunningApps[i].applicationProcessId, SIGTERM);
+                    cout << strerror(errno) << endl;
+                }
+
+                cout << "processes killed" << endl;
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Error parsing JSON message: " << e.what() << std::endl;
+        }
+    }
+    cout << "done" << endl;
+
+    return 0;
+}
+
+
+
+
+// done

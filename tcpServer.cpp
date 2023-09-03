@@ -3,25 +3,7 @@
 
 using namespace std;
 
-string executeCommand(string command)
-{
-    string result;
-    FILE *pipe = popen(command.c_str(), "r");
-    if (!pipe)
-    {
-        cerr << "Error executing command." << endl;
-        return result;
-    }
 
-    char buffer[128];
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL)
-    {
-        result += buffer;
-    }
-
-    pclose(pipe);
-    return result;
-}
 
 string runApplicationResizeReposition(string recievedString)
 {
