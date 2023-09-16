@@ -1,4 +1,3 @@
-// #include "test.h"
 #include <iostream>
 #include <unistd.h>
 #include <cstdio>
@@ -29,6 +28,7 @@ struct runningApplication
     int applicationSizeHeight, applicationSizeWidth;
     string windowId;
     pid_t applicationProcessId;
+    std::vector<char *> args;
 };
 // JSON message format
 /*
@@ -39,6 +39,7 @@ JSON MSG format
   "payload":
     {
         "path": "appPath",
+        "args": "",
         "x": "xCoordinate",
         "y": "yCoordinate",
         "w": "width",
@@ -57,8 +58,32 @@ void parseJSONMessage(string msgFromMasterApp, string &errorCode, runningApplica
     app.applicationPath = tcpMessageAsJSON["path"];
     app.applicationLocationX = tcpMessageAsJSON["x"];
     app.applicationLocationY = tcpMessageAsJSON["y"];
-    app.applicationSizeHeight = tcpMessageAsJSON["w"];
-    app.applicationSizeWidth = tcpMessageAsJSON["h"];
+    app.applicationSizeWidth = tcpMessageAsJSON["w"];
+    app.applicationSizeHeight = tcpMessageAsJSON["h"];
+
+    std::string argStr = tcpMessageAsJSON["args"];
+    int start = 0;
+    bool inQuotes = false;
+
+    app.args.clear();
+    for (int i = 0; i < argStr.length(); ++i)
+    {
+        if (argStr[i] == ' ' && !inQuotes)
+        { // found a space not within quotes; split the argument
+            app.args.push_back(const_cast<char *>(strdup(argStr.substr(start, i - start).c_str())));
+            start = i + 1;
+        }
+        else if (argStr[i] == '"')
+        {
+            inQuotes = !inQuotes;
+        }
+    }
+    app.args.push_back(const_cast<char *>(strdup(argStr.substr(start).c_str()))); // add last arg
+
+    if (argStr == "")
+    {
+        app.args.clear();
+    }
 }
 
 string executeCommand(string command)
@@ -109,8 +134,21 @@ string runApplicationResizeReposition(runningApplication &app)
 
     if (pid == 0)
     {
-        // cout << "Child PID: " << getpid() << endl;
-        error = execl(app.applicationPath.c_str(), " ", c);
+        // create char* array for execv()
+
+        int n = app.args.size();
+        char *args[n + 2];                                         // +1 for NULL
+        args[0] = const_cast<char *>(app.applicationPath.c_str()); // Set the program name as the first argument
+        // string a = "prog name";
+        // args[0] = const_cast<char *>(a.c_str());
+        for (int i = 0; i < n; i++)
+        {
+            args[i + 1] = const_cast<char *>(app.args[i]); // cast std::string to char*
+        }
+        args[n + 1] = NULL; // need NULL at end
+
+        error = execv(app.applicationPath.c_str(), args);
+        // error = execl(app.applicationPath.c_str(),NULL);
 
         if (error == -1)
         {
@@ -127,9 +165,9 @@ string runApplicationResizeReposition(runningApplication &app)
     // TO DO: need to find a way to check if program has started yet, instead of waiting
 
     struct timespec delay;
-    delay.tv_sec = 3;  // seconds
-    delay.tv_nsec = 0; // nanoseconds
-    nanosleep(&delay, c);
+    delay.tv_sec = 0;  // seconds
+    delay.tv_nsec = 100000000; // nanoseconds, currently set to 100ms
+    //nanosleep(&delay, c);
 
     int status = 0;
 
@@ -137,84 +175,88 @@ string runApplicationResizeReposition(runningApplication &app)
     {
         // cout << "Parent PID: " << getpid() << endl;
         // cout << "Child from within Parent PID: " << pid << endl;
-        // newlyLaunchedProcessPid = getppid();
         app.applicationProcessId = pid;
         newlyLaunchedProcessPid = pid;
         sprintf(newlyLaunchedProcessPidAsString, "%d", newlyLaunchedProcessPid);
-
-        /*   if (waitpid(newlyLaunchedProcessPid, &status, 0) > 0)
-           {
-
-               if (WIFEXITED(status) && !WEXITSTATUS(status))
-               {
-                   printf("program execution successful\n");
-   */
-        strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
-        strcat(commandFinal, newlyLaunchedProcessPidAsString);
-        // cout << commandFinal << endl;
-        //  command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
-
-        windowID = executeCommand(commandFinal); // TO DO: check if value is valid
-        // TO DO: if result not good, errorCode += "xdotool command: <command> failed";
-        // cout << "window ID: " << windowID << endl;
-        windowIDAfterNewLineStrip = windowID;
-        windowIDAfterNewLineStrip[windowIDAfterNewLineStrip.length() - 1] = ' ';
-
-        // cout << "windowIDAfterNewLineStrip:\t" << windowIDAfterNewLineStrip << endl;
-        app.windowId = windowIDAfterNewLineStrip;
-
-        strcpy(commandFinal, "xdotool windowsize ");
-        strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
-        strcat(commandFinal, " ");
-        strcat(commandFinal, programSizeWidth);
-        strcat(commandFinal, " ");
-        strcat(commandFinal, programSizeHeight);
-
-        // command = "xdotool windowsize " + windowIDAfterNewLineStrip + " " + programSizeWidth + " " + programSizeHeight;
-        // cout << commandFinal << endl;
-        response = executeCommand(commandFinal);
-
-        strcpy(commandFinal, "xdotool windowmove ");
-        strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
-        strcat(commandFinal, " ");
-        strcat(commandFinal, programPositionX);
-        strcat(commandFinal, " ");
-        strcat(commandFinal, programPositionY);
-
-        // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
-        // cout << commandFinal << endl;
-        response = executeCommand(commandFinal);
         /*
-                }
-                else if (WIFEXITED(status) && WEXITSTATUS(status))
-                {
-                    if (WEXITSTATUS(status) == 127)
-                    {
+        pid_t ret = waitpid(newlyLaunchedProcessPid, &status, WNOHANG);
+        while(waitpid(newlyLaunchedProcessPid, &status, WNOHANG) == 0)
+        {
+            nanosleep(&delay, c);
+        }
+        ret = waitpid(newlyLaunchedProcessPid, &status, WNOHANG);
+        if (ret > 0)
+        {
 
-                        // execv failed
-                        printf("execv failed\n");
-                    }
-                    else
-                        printf("program terminated normally,"
-                               " but returned a non-zero status\n");
+            if (WIFEXITED(status) && !WEXITSTATUS(status))
+            {
+                printf("program execution successful\n");
+        */
+                strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
+                strcat(commandFinal, newlyLaunchedProcessPidAsString);
+                // cout << commandFinal << endl;
+                //  command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
+
+                windowID = executeCommand(commandFinal); // TO DO: check if value is valid
+                // TO DO: if result not good, errorCode += "xdotool command: <command> failed";
+                // cout << "window ID: " << windowID << endl;
+                windowIDAfterNewLineStrip = windowID;
+                windowIDAfterNewLineStrip[windowIDAfterNewLineStrip.length() - 1] = ' ';
+
+                // cout << "windowIDAfterNewLineStrip:\t" << windowIDAfterNewLineStrip << endl;
+                app.windowId = windowIDAfterNewLineStrip;
+
+                strcpy(commandFinal, "xdotool windowsize ");
+                strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
+                strcat(commandFinal, " ");
+                strcat(commandFinal, programSizeWidth);
+                strcat(commandFinal, " ");
+                strcat(commandFinal, programSizeHeight);
+
+                // command = "xdotool windowsize " + windowIDAfterNewLineStrip + " " + programSizeWidth + " " + programSizeHeight;
+                // cout << commandFinal << endl;
+                response = executeCommand(commandFinal);
+
+                strcpy(commandFinal, "xdotool windowmove ");
+                strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
+                strcat(commandFinal, " ");
+                strcat(commandFinal, programPositionX);
+                strcat(commandFinal, " ");
+                strcat(commandFinal, programPositionY);
+
+                // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
+                // cout << commandFinal << endl;
+                response = executeCommand(commandFinal);
+            /*
+            }
+            else if (WIFEXITED(status) && WEXITSTATUS(status))
+            {
+                if (WEXITSTATUS(status) == 127)
+                {
+
+                    // execv failed
+                    printf("execv failed\n");
                 }
                 else
-                    printf("program didn't terminate normally\n");
+                    printf("program terminated normally,"
+                           " but returned a non-zero status\n");
             }
             else
-            {
-                // waitpid() failed
-                printf("waitpid() failed\n");
-            }
-
-            */
+                printf("program didn't terminate normally\n");
+        }
+        else
+        {
+            // waitpid() failed
+            printf("waitpid() failed\n");
+        }
+        */
     }
 
     return errorCode;
 }
 
 // Main function for Production
-/*
+
 int main(int argc, char *argv[])
 {
     if (argc != 4)
@@ -294,12 +336,39 @@ int main(int argc, char *argv[])
         json root = json::parse(messageBuffer);
 
         // Check if it's a 'RequestIdentify' message
-        if (root["messageType"] == 2)
+         if (root["messageType"] == "RequestIdentify")
         {
+            json payload;
+            payload["id"] = clientID;
+            payload["ip"] = "insert static IP";
+            
+            // Create an array for 'displayDetails' and add two DisplayDetails objects
+            json displayDetailsArray = json::array();
+
+            // Create and populate the first DisplayDetails object
+            json displayDetailsObject1;
+            displayDetailsObject1["x"] = 0;
+            displayDetailsObject1["y"] = 0;
+            displayDetailsObject1["w"] = 3840;
+            displayDetailsObject1["h"] = 2160;
+
+            // Create and populate the second DisplayDetails object
+            json displayDetailsObject2;
+            displayDetailsObject2["x"] = 0;
+            displayDetailsObject2["y"] = 2160;
+            displayDetailsObject2["w"] = 3840;
+            displayDetailsObject2["h"] = 2160;
+
+            // Add both DisplayDetails objects to the array
+            displayDetailsArray.push_back(displayDetailsObject1);
+
+            // Add the 'displayDetails' array to the payload
+            payload["displayDetails"] = displayDetailsArray;
+
             // Construct 'Identify' message
             json message;
-            message["messageType"] = 0;
-            message["payload"] = clientID;
+            message["messageType"] = "Identify";
+            message["payload"] = payload.dump();
             std::string messageStr = message.dump();
 
             // convert length of message from int to 4 bytes
@@ -360,7 +429,7 @@ int main(int argc, char *argv[])
             json message = json::parse(messageBuffer);
 
             // Check if it's a 'StartApp' message
-            if (message["messageType"] == START_APP)
+            if (message["messageType"] == "StartApp")
             {
                 std::string payloadStr = message["payload"];
 
@@ -371,7 +440,7 @@ int main(int argc, char *argv[])
                 vectorOfRunningApps.push_back(appD);
             }
             // Handles Kill processes/shurt down apps message from the master app
-            else if (message["messageType"] == KILL_APP)
+            else if (message["messageType"] == "StopApps")
             {
                 for (int i = 0; i < vectorOfRunningApps.size(); i++)
                 {
@@ -396,10 +465,11 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-*/
 
 
 // main function for testing solo
+
+/*
 int main()
 
 {
@@ -412,15 +482,18 @@ int main()
     messagesList[0] = {
         {"messageType", 4},
         {"payload",
-         {{"path", "/usr/bin/gnome-clocks"},
+         {{"path", "/usr/bin/firefox"},
+          {"args", "https://google.com/"},
           {"x", 000},
           {"y", 000},
           {"w", 600},
           {"h", 600}}}};
+
     messagesList[1] = {
         {"messageType", 4},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
+          {"args", ""},
           {"x", 200},
           {"y", 50},
           {"w", 400},
@@ -429,6 +502,7 @@ int main()
         {"messageType", 4},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
+          {"args", ""},
           {"x", 500},
           {"y", 100},
           {"w", 400},
@@ -440,6 +514,7 @@ int main()
         {"messageType", 4},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
+          {"args", ""},
           {"x", 500},
           {"y", 100},
           {"w", 400},
@@ -448,7 +523,6 @@ int main()
         {"messageType", 5},
         {"payload", ""}};
 
-    
     for (int i = 0; i < 6; i++)
     {
         // Parse JSON message
@@ -488,8 +562,5 @@ int main()
 
     return 0;
 }
-
-
-
-
+*/
 // done
