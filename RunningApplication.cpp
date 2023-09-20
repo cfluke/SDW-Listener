@@ -165,9 +165,9 @@ string runApplicationResizeReposition(runningApplication &app)
     // TO DO: need to find a way to check if program has started yet, instead of waiting
 
     struct timespec delay;
-    delay.tv_sec = 0;  // seconds
+    delay.tv_sec = 3;          // seconds
     delay.tv_nsec = 100000000; // nanoseconds, currently set to 100ms
-    //nanosleep(&delay, c);
+    nanosleep(&delay, c);
 
     int status = 0;
 
@@ -192,64 +192,64 @@ string runApplicationResizeReposition(runningApplication &app)
             {
                 printf("program execution successful\n");
         */
-                strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
-                strcat(commandFinal, newlyLaunchedProcessPidAsString);
-                // cout << commandFinal << endl;
-                //  command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
+        strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
+        strcat(commandFinal, newlyLaunchedProcessPidAsString);
+         cout << commandFinal << endl;
+        //  command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
 
-                windowID = executeCommand(commandFinal); // TO DO: check if value is valid
-                // TO DO: if result not good, errorCode += "xdotool command: <command> failed";
-                // cout << "window ID: " << windowID << endl;
-                windowIDAfterNewLineStrip = windowID;
-                windowIDAfterNewLineStrip[windowIDAfterNewLineStrip.length() - 1] = ' ';
+        windowID = executeCommand(commandFinal); // TO DO: check if value is valid
+        // TO DO: if result not good, errorCode += "xdotool command: <command> failed";
+         cout << "window ID: " << windowID << endl;
+        windowIDAfterNewLineStrip = windowID;
+        windowIDAfterNewLineStrip[windowIDAfterNewLineStrip.length() - 1] = ' ';
 
-                // cout << "windowIDAfterNewLineStrip:\t" << windowIDAfterNewLineStrip << endl;
-                app.windowId = windowIDAfterNewLineStrip;
+        // cout << "windowIDAfterNewLineStrip:\t" << windowIDAfterNewLineStrip << endl;
+        app.windowId = windowIDAfterNewLineStrip;
 
-                strcpy(commandFinal, "xdotool windowsize ");
-                strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
-                strcat(commandFinal, " ");
-                strcat(commandFinal, programSizeWidth);
-                strcat(commandFinal, " ");
-                strcat(commandFinal, programSizeHeight);
+        strcpy(commandFinal, "xdotool windowsize ");
+        strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
+        strcat(commandFinal, " ");
+        strcat(commandFinal, programSizeWidth);
+        strcat(commandFinal, " ");
+        strcat(commandFinal, programSizeHeight);
 
-                // command = "xdotool windowsize " + windowIDAfterNewLineStrip + " " + programSizeWidth + " " + programSizeHeight;
-                // cout << commandFinal << endl;
-                response = executeCommand(commandFinal);
+        // command = "xdotool windowsize " + windowIDAfterNewLineStrip + " " + programSizeWidth + " " + programSizeHeight;
+        // cout << commandFinal << endl;
+        response = executeCommand(commandFinal);
 
-                strcpy(commandFinal, "xdotool windowmove ");
-                strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
-                strcat(commandFinal, " ");
-                strcat(commandFinal, programPositionX);
-                strcat(commandFinal, " ");
-                strcat(commandFinal, programPositionY);
+        strcpy(commandFinal, "xdotool windowmove ");
+        strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
+        strcat(commandFinal, " ");
+        strcat(commandFinal, programPositionX);
+        strcat(commandFinal, " ");
+        strcat(commandFinal, programPositionY);
 
-                // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
-                // cout << commandFinal << endl;
-                response = executeCommand(commandFinal);
-            /*
-            }
-            else if (WIFEXITED(status) && WEXITSTATUS(status))
+        // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
+        // cout << commandFinal << endl;
+        response = executeCommand(commandFinal);
+        /*
+        }
+        else if (WIFEXITED(status) && WEXITSTATUS(status))
+        {
+            if (WEXITSTATUS(status) == 127)
             {
-                if (WEXITSTATUS(status) == 127)
-                {
 
-                    // execv failed
-                    printf("execv failed\n");
-                }
-                else
-                    printf("program terminated normally,"
-                           " but returned a non-zero status\n");
+                // execv failed
+                printf("execv failed\n");
             }
             else
-                printf("program didn't terminate normally\n");
+                printf("program terminated normally,"
+                       " but returned a non-zero status\n");
         }
         else
-        {
-            // waitpid() failed
-            printf("waitpid() failed\n");
-        }
-        */
+            printf("program didn't terminate normally\n");
+    }
+    else
+    {
+        // waitpid() failed
+        printf("waitpid() failed\n");
+    }
+    */
     }
 
     return errorCode;
@@ -313,7 +313,14 @@ int main(int argc, char *argv[])
     char lengthBuffer[4];
     if (recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0) <= 0)
     {
+
+        for (int i = 0; i < 4; i++)
+        {
+            cout << lengthBuffer[i] << endl;
+        }
+
         perror("Error receiving message length");
+
         close(client_fd);
         return 1;
     }
@@ -336,7 +343,7 @@ int main(int argc, char *argv[])
         json root = json::parse(messageBuffer);
 
         // Check if it's a 'RequestIdentify' message
-         if (root["messageType"] == "RequestIdentify")
+        if (root["messageType"] == "RequestIdentify")
         {
             json payload;
             payload["id"] = clientID;
@@ -374,10 +381,10 @@ int main(int argc, char *argv[])
             // convert length of message from int to 4 bytes
             int n = messageStr.size();
             unsigned char bytes[4];
-            bytes[0] = (n >> 24) & 0xFF;
-            bytes[1] = (n >> 16) & 0xFF;
-            bytes[2] = (n >> 8) & 0xFF;
-            bytes[3] = n & 0xFF;
+            bytes[0] = n & 0xFF;
+            bytes[1] = (n >> 8) & 0xFF;
+            bytes[2] = (n >> 16) & 0xFF;
+            bytes[3] = (n >> 24) & 0xFF;
 
             // append length to start of message
             messageStr.insert(0, reinterpret_cast<const char *>(bytes), sizeof(bytes));
@@ -464,8 +471,6 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-
-
 
 // main function for testing solo
 
