@@ -368,6 +368,7 @@ int main(int argc, char *argv[])
 
             // Add both DisplayDetails objects to the array
             displayDetailsArray.push_back(displayDetailsObject1);
+            displayDetailsArray.push_back(displayDetailsObject2);
 
             // Add the 'displayDetails' array to the payload
             payload["displayDetails"] = displayDetailsArray;
