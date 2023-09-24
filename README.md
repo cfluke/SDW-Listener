@@ -24,17 +24,15 @@
         <li><a href="#supported-platforms">Supported Platforms</a></li>
       </ul>
     </li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#usage">Usage</a></li>
     <li>
-      <a href="#getting-started">Getting Started</a>
+      <a href="#contributing">Contributing</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#features">Features</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contributors">Contributors</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
@@ -55,23 +53,6 @@ The SDW Listener is a client app which, in combination with the SDW Controller, 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
-<!-- GETTING STARTED -->
-## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
-
-### Prerequisites
-
-
-
-### Installation
-
-
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
 
 <!-- FEATURES -->
 ## Features
@@ -86,28 +67,27 @@ To get a local copy up and running follow these simple example steps.
 
 
 
+<!-- USAGE -->
+## Usage
+
+Provide instructions on how to download the latest release, install/extract it, run it, etc.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Insert instructions on how to contribute here.
+This is an example of how you may give instructions on setting up the project locally and start contributing.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- LICENSE -->
-## License
-
-Distributed under the MIT License. See `LICENSE.txt` for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### Prerequisites
 
 
 
-<!-- CONTRIBUTORS -->
-## Contributors
+### Installation
 
-Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.com
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -116,6 +96,8 @@ Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.c
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
+* [nlohmann json](https://github.com/nlohmann/json)
+* [xdotool](https://github.com/jordansissel/xdotool)
 * [Img Shields](https://shields.io)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
