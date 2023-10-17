@@ -160,7 +160,7 @@ string executeCommand(string command)
     return result;
 }
 
-runApplicationResizeReposition(runningApplication &app)
+void runApplicationResizeReposition(runningApplication &app)
 {
     char programPath[50];
     char programPositionX[50];
@@ -325,12 +325,10 @@ runApplicationResizeReposition(runningApplication &app)
         printf("\nCreating a child process to launch the application failed.\n");
         printf("Creating a child process failed (from function \"fork\"): %s", strerror(errno));
     }
-
-    return errorCode;
 }
 
 // Main function for Production
-/*
+
 int main(int argc, char *argv[])
 {
     if (argc != 4)
@@ -584,7 +582,9 @@ int main(int argc, char *argv[])
                     cout << strerror(errno) << endl;
                 }
 
-                cout << "processes killed" << endl;
+                cout << "processes killed\n" << endl;
+                cout << "\nDeleting Firefox User Profiles in the directory \"usr/firefoxProfiles/\"." << endl;
+                cout << executeCommand("rm -r usr/firefoxProfiles/*");
             }
             else
             {
@@ -604,9 +604,10 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-*/
+
 
 // main function for testing solo
+/*
 int main()
 
 {
@@ -617,7 +618,7 @@ int main()
     int numOfMessages = 1;
     json messagesList[numOfMessages];
 
-    /*messagesList[0] = {
+    messagesList[0] = {
         {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/firefox"},
@@ -625,8 +626,8 @@ int main()
           {"x", 000},
           {"y", 10},
           {"w", 600},
-          {"h", 600}}}}; */
-    messagesList[0] = {
+          {"h", 600}}}}; 
+    messagesList[1] = {
         {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
@@ -635,18 +636,18 @@ int main()
           {"y", 50},
           {"w", 400},
           {"h", 400}}}};
-    /* messagesList[2] = {
+     messagesList[2] = {
          {"messageType", "StartApp"},
          {"payload",
           {{"path", "/usr/bin/gnome-calculator"},
            {"x", 500},
            {"y", 100},
            {"w", 400},
-           {"h", 400}}}}; */
-    /* messagesList[3] = {
+           {"h", 400}}}}; 
+     messagesList[3] = {
          {"messageType", "StopApps"},
-         {"payload", ""}}; */
-    /* messagesList[4] = {
+         {"payload", ""}}; 
+     messagesList[4] = {
          {"messageType", "StartApp"},
          {"payload",
           {{"path", "/usr/bin/gnome-calculator"},
@@ -654,10 +655,10 @@ int main()
            {"x", 500},
            {"y", 100},
            {"w", 400},
-           {"h", 400}}}}; */
-    /* messagesList[5] = {
+           {"h", 400}}}}; 
+     messagesList[5] = {
          {"messageType", "StopApps"},
-         {"payload", ""}}; */
+         {"payload", ""}}; 
 
     struct timespec delay;
     delay.tv_nsec = 0;
@@ -712,5 +713,5 @@ int main()
 
     return 0;
 }
-
+*/
 // done
