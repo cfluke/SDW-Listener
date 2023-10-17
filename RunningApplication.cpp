@@ -18,9 +18,9 @@
 using json = nlohmann::json;
 using namespace std;
 
-#define START_APP 4
-#define KILL_APP 5
-
+#define TIMEOUT_VALUE_SECONDS 3
+#define TIMEOUT_VALUE_NANOSECONDS 100000000            // currently set to 100ms
+#define REFRESH_TIME_PERIOD_VALUE_NANOSECONDS 10000000 // currently set to 1ms
 struct runningApplication
 {
     std::string applicationPath;
@@ -55,11 +55,61 @@ void parseJSONMessage(string msgFromMasterApp, string &errorCode, runningApplica
 
     tcpMessageAsJSON = json::parse(msgFromMasterApp);
 
-    app.applicationPath = tcpMessageAsJSON["path"];
-    app.applicationLocationX = tcpMessageAsJSON["x"];
-    app.applicationLocationY = tcpMessageAsJSON["y"];
-    app.applicationSizeWidth = tcpMessageAsJSON["w"];
-    app.applicationSizeHeight = tcpMessageAsJSON["h"];
+    if (tcpMessageAsJSON.contains("path"))
+    {
+        app.applicationPath = tcpMessageAsJSON["path"];
+    }
+    else
+    {
+        printf("\nEncountered an error, program path was not found in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, program path was not found in the JSON object which was parsed from the TCP message.");
+    }
+
+    if (tcpMessageAsJSON.contains("x"))
+    {
+        app.applicationLocationX = tcpMessageAsJSON["x"];
+    }
+    else
+    {
+        printf("\nEncountered an error, the x-coordinate for the window was not found in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, the x - coordinate for the window was not found in the JSON object which was parsed from the TCP message.");
+    }
+
+    if (tcpMessageAsJSON.contains("y"))
+    {
+        app.applicationLocationY = tcpMessageAsJSON["y"];
+    }
+    else
+    {
+        printf("\nEncountered an error, y-coordinate for the window was not found in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, y-coordinate for the window was not found in the JSON object which was parsed from the TCP message.");
+    }
+
+    if (tcpMessageAsJSON.contains("w"))
+    {
+        app.applicationSizeWidth = tcpMessageAsJSON["w"];
+    }
+    else
+    {
+        printf("\nEncountered an error, the width value for the window was not found in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, the width value for the window was not found in the JSON object which was parsed from the TCP message.");
+    }
+
+    if (tcpMessageAsJSON.contains("h"))
+    {
+        app.applicationSizeHeight = tcpMessageAsJSON["h"];
+    }
+    else
+    {
+        printf("\nEncountered an error, the height value for the window was not found in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, the height value for the window was not found in the JSON object which was parsed from the TCP message.");
+    }
+
+    if (!tcpMessageAsJSON.contains("args"))
+    {
+        printf("\nEncountered an error, the arguments field was not in the correct format in the JSON object which was parsed from the TCP message.\n");
+        throw std::invalid_argument("Encountered an error, the arguments field was not in the correct format in the JSON object which was parsed from the TCP message.");
+    }
 
     std::string argStr = tcpMessageAsJSON["args"];
     int start = 0;
@@ -89,10 +139,14 @@ void parseJSONMessage(string msgFromMasterApp, string &errorCode, runningApplica
 string executeCommand(string command)
 {
     string result;
+    char error[1000];
     FILE *pipe = popen(command.c_str(), "r");
     if (!pipe)
     {
-        cerr << "Error executing command." << endl;
+        sprintf(error,"\nEncountered an error while executing a shell command: %s\n", strerror(errno));
+        throw std::invalid_argument(error);
+
+        result = "";
         return result;
     }
 
@@ -106,7 +160,7 @@ string executeCommand(string command)
     return result;
 }
 
-string runApplicationResizeReposition(runningApplication &app)
+runApplicationResizeReposition(runningApplication &app)
 {
     char programPath[50];
     char programPositionX[50];
@@ -116,7 +170,7 @@ string runApplicationResizeReposition(runningApplication &app)
 
     string command, response, windowID;
     string windowIDAfterNewLineStrip;
-    string errorCode = "No error, OK";
+    char error[1000];
     timespec *c = NULL;
     pid_t pid;
     pid_t newlyLaunchedProcessPid = 0;
@@ -147,16 +201,12 @@ string runApplicationResizeReposition(runningApplication &app)
         }
         args[n + 1] = NULL; // need NULL at end
 
-        error = execv(app.applicationPath.c_str(), args);
         // error = execl(app.applicationPath.c_str(),NULL);
 
-        if (error == -1)
+        if (execv(app.applicationPath.c_str(), args) == -1)
         {
-            errorCode = "Program execution failed";
-        }
-        else
-        {
-            cout << "success" << endl;
+            sprintf(error, "\nLaunching application at: \"%s\" failed. launching application error (from function \"execv()\"): %s", app.applicationPath.c_str(), strerror(errno));
+            throw std::invalid_argument(error);
         }
 
         exit(0);
@@ -165,13 +215,12 @@ string runApplicationResizeReposition(runningApplication &app)
     // TO DO: need to find a way to check if program has started yet, instead of waiting
 
     struct timespec delay;
-    delay.tv_sec = 3;          // seconds
-    delay.tv_nsec = 100000000; // nanoseconds, currently set to 100ms
-    nanosleep(&delay, c);
+
+    unsigned long int timeoutInNanoSeconds = TIMEOUT_VALUE_SECONDS * (unsigned long int)1000000000 + TIMEOUT_VALUE_NANOSECONDS;
 
     int status = 0;
 
-    if (pid != 0)
+    if (pid > 0)
     {
         // cout << "Parent PID: " << getpid() << endl;
         // cout << "Child from within Parent PID: " << pid << endl;
@@ -194,12 +243,32 @@ string runApplicationResizeReposition(runningApplication &app)
         */
         strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
         strcat(commandFinal, newlyLaunchedProcessPidAsString);
-         cout << commandFinal << endl;
-        //  command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
+        // cout << commandFinal << endl;
+        //    command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
 
-        windowID = executeCommand(commandFinal); // TO DO: check if value is valid
-        // TO DO: if result not good, errorCode += "xdotool command: <command> failed";
-         cout << "window ID: " << windowID << endl;
+        unsigned long int timePassedInNanoseconds = 0;
+        windowID = "";
+
+        delay.tv_nsec = REFRESH_TIME_PERIOD_VALUE_NANOSECONDS;
+        delay.tv_sec = 0;
+
+        // while loop runs if windowID has a length less than 15 because that means an error message from xdotool is returned instead of a valid window ID
+        while (windowID.length() < 2 && timePassedInNanoseconds < timeoutInNanoSeconds)
+        {
+            windowID = executeCommand(commandFinal);
+
+            // cout << "window ID from while loop: " << windowID << endl;
+
+            timePassedInNanoseconds += REFRESH_TIME_PERIOD_VALUE_NANOSECONDS;
+
+            nanosleep(&delay, c);
+        }
+
+        if (windowID < 2) {
+            sprintf(error, "\nError finding window ID for launched application: \"%s\" failed. Window ID search timed out, potential fix: increase value of \"TIMEOUT_VALUE_NANOSECONDS\" const in listener app.\n", app.applicationPath.c_str());
+            throw std::invalid_argument(error);
+        }
+        // cout << "window ID: " << windowID << endl;
         windowIDAfterNewLineStrip = windowID;
         windowIDAfterNewLineStrip[windowIDAfterNewLineStrip.length() - 1] = ' ';
 
@@ -251,17 +320,23 @@ string runApplicationResizeReposition(runningApplication &app)
     }
     */
     }
+    else if (pid == -1)
+    {
+        printf("\nCreating a child process to launch the application failed.\n");
+        printf("Creating a child process failed (from function \"fork\"): %s", strerror(errno));
+    }
 
     return errorCode;
 }
 
 // Main function for Production
-
+/*
 int main(int argc, char *argv[])
 {
     if (argc != 4)
     {
-        std::cerr << "Usage: " << argv[0] << " <server_ip> <server_port> <client_id>" << std::endl;
+        std::cerr << "Please provide: " << argv[0] << " <server_ip> <server_port> <client_id>\n"
+                  << "For example: ./ListenerApp 192.168.1.1 8000 KekDisplay1" << std::endl;
         return 1;
     }
 
@@ -269,24 +344,24 @@ int main(int argc, char *argv[])
     int serverPort = std::atoi(argv[2]);
     const char *clientID = argv[3];
 
+    errno = 0;
+
     // Create a socket
     int listening = socket(AF_INET, SOCK_STREAM, 0);
     string terminal, terminalName;
     string errorCode, recievedString;
 
-    terminal = "gnome-terminal";
-    terminalName = "osboxes@osboxes:~/Desktop/dev";
-
     int status, valread, client_fd;
     struct sockaddr_in serv_addr;
-    // string hello = "Hello from client";
 
     vector<runningApplication> vectorOfRunningApps;
 
     char buffer[1024] = {0};
     if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        printf("\n Socket creation error \n");
+
+        printf("\n Connection Error: Failed to Create a Socket for TCP Connection. \n");
+        printf("Socket error: %s", strerror(errno));
         return -1;
     }
 
@@ -297,29 +372,36 @@ int main(int argc, char *argv[])
     // form
     if (inet_pton(AF_INET, serverIP, &serv_addr.sin_addr) <= 0)
     {
-        printf(
-            "\nInvalid address/ Address not supported \n");
+        printf("\n Invalid IP address. Could not convert IP address to binary form. Exiting the program now.\n");
+        printf("IP address conversion error: %s", strerror(errno));
         return -1;
     }
 
     if ((status = connect(client_fd, (struct sockaddr *)&serv_addr,
                           sizeof(serv_addr))) < 0)
     {
-        printf("\nConnection Failed \n");
+        printf("\nTCP connection with server failed. Exiting the program now. \n");
+        printf("TCP connection errror: %s", strerror(errno));
         return -1;
     }
 
     // Wait for first 4 bytes of 'RequestIdentify' message
     char lengthBuffer[4];
-    if (recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0) <= 0)
+    ssize_t bytesRecieved;
+
+    bytesRecieved = recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0);
+
+    if (bytesRecieved <= 0)
     {
-
-        for (int i = 0; i < 4; i++)
+        if (bytesRecieved == 0)
         {
-            cout << lengthBuffer[i] << endl;
+            printf("\nMaster application has terminated connection. Exiting the program now \n");
         }
-
-        perror("Error receiving message length");
+        else
+        {
+            printf("TCP \"RequestIdentify\" message recieving error: %s", strerror(errno));
+            printf("\n. Exiting the program now. \n");
+        }
 
         close(client_fd);
         return 1;
@@ -328,13 +410,25 @@ int main(int argc, char *argv[])
     // Fetch rest of 'RequestIdentify' message
     int messageLength = *(int *)lengthBuffer;
     char *messageBuffer = new char[messageLength + 1];
-    if (recv(client_fd, messageBuffer, messageLength, 0) <= 0)
+
+    bytesRecieved = recv(client_fd, messageBuffer, messageLength, 0);
+    if (bytesRecieved <= 0)
     {
-        perror("Error receiving message");
+        if (bytesRecieved == 0)
+        {
+            printf("\nMaster application has terminated connection. Exiting the program now \n");
+        }
+        else
+        {
+            printf("TCP message recieving error: %s", strerror(errno));
+            printf("\n. Exiting the program now. \n");
+        }
+
         close(client_fd);
         delete[] messageBuffer;
         return 1;
     }
+
     messageBuffer[messageLength] = '\0';
 
     // Parse JSON message
@@ -348,7 +442,7 @@ int main(int argc, char *argv[])
             json payload;
             payload["id"] = clientID;
             payload["ip"] = "insert static IP";
-            
+
             // Create an array for 'displayDetails' and add two DisplayDetails objects
             json displayDetailsArray = json::array();
 
@@ -389,12 +483,13 @@ int main(int argc, char *argv[])
 
             // append length to start of message
             messageStr.insert(0, reinterpret_cast<const char *>(bytes), sizeof(bytes));
-            std::cout << messageStr << std::endl;
+            // std::cout << messageStr << std::endl;
 
             // Send message
             if (send(client_fd, messageStr.c_str(), messageStr.length(), 0) == -1)
             {
-                perror("Error sending message");
+                printf("Listener app \"Identify\" TCP message send error: %s", strerror(errno));
+                printf("\n. Exiting the program now. \n");
                 close(client_fd);
                 return 1;
             }
@@ -403,28 +498,52 @@ int main(int argc, char *argv[])
     catch (const std::exception &e)
     {
         std::cerr << "Error parsing JSON message: " << e.what() << std::endl;
+        printf("\n. Exiting the program now. \n");
         close(client_fd);
         delete[] messageBuffer;
         return 1;
     }
 
     // Continuously listen for messages
+
+    printf("\nListening for Messages.\n");
     while (true)
     {
         // Receive data
         char lengthBuffer[4];
-        if (recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0) <= 0)
+
+        bytesRecieved = recv(client_fd, lengthBuffer, sizeof(lengthBuffer), 0);
+        if (bytesRecieved <= 0)
         {
-            perror("Error receiving message length");
+            if (bytesRecieved == 0)
+            {
+                printf("\nMaster application has terminated connection. Exiting the program now \n");
+            }
+            else
+            {
+                printf("Encountered an error when recieving the first 4 bytes from a command message via TCP from master application: %s", strerror(errno));
+                printf("\n. Exiting the program now. \n");
+            }
+
             close(client_fd);
             return 1;
         }
 
         int messageLength = *(int *)lengthBuffer;
         char *messageBuffer = new char[messageLength + 1];
-        if (recv(client_fd, messageBuffer, messageLength, 0) <= 0)
+
+        bytesRecieved = recv(client_fd, messageBuffer, messageLength, 0);
+        if (bytesRecieved <= 0)
         {
-            perror("Error receiving message");
+            if (bytesRecieved == 0)
+            {
+                printf("\nMaster application has terminated connection. Exiting the program now \n");
+            }
+            else
+            {
+                printf("Encountered an error when recieving a command message via TCP from master application: %s", strerror(errno));
+                printf("\n. Exiting the program now. \n");
+            }
             close(client_fd);
             delete[] messageBuffer;
             return 1;
@@ -436,19 +555,28 @@ int main(int argc, char *argv[])
         {
             json message = json::parse(messageBuffer);
 
+            string messageType = message["messageType"];
+
             // Check if it's a 'StartApp' message
-            if (message["messageType"] == "StartApp")
+            if (messageType == "StartApp")
             {
                 std::string payloadStr = message["payload"];
 
-                runningApplication appD;
-                parseJSONMessage(payloadStr, errorCode, appD);
-                runApplicationResizeReposition(appD);
+                 try
+                {
+                    runningApplication appD;
+                    parseJSONMessage(payloadStr, errorCode, appD);
+                    runApplicationResizeReposition(appD);
 
-                vectorOfRunningApps.push_back(appD);
+                    vectorOfRunningApps.push_back(appD);
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "Error parsing JSON payload data field in message: " << e.what() << std::endl;
+                }
             }
-            // Handles Kill processes/shurt down apps message from the master app
-            else if (message["messageType"] == "StopApps")
+            // Handles Kill processes/shut down apps message from the master app
+            else if (messageType == "StopApps")
             {
                 for (int i = 0; i < vectorOfRunningApps.size(); i++)
                 {
@@ -457,6 +585,10 @@ int main(int argc, char *argv[])
                 }
 
                 cout << "processes killed" << endl;
+            }
+            else
+            {
+                printf("Encountered an Error, \"%s\" was received as the message type which is an invalid value.\n", messageType.c_str());
             }
         }
         catch (const std::exception &e)
@@ -472,10 +604,9 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+*/
 
 // main function for testing solo
-
-/*
 int main()
 
 {
@@ -483,53 +614,56 @@ int main()
 
     vector<runningApplication> vectorOfRunningApps;
 
-    json messagesList[6];
+    int numOfMessages = 1;
+    json messagesList[numOfMessages];
 
-    messagesList[0] = {
-        {"messageType", 4},
+    /*messagesList[0] = {
+        {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/firefox"},
           {"args", "https://google.com/"},
           {"x", 000},
-          {"y", 000},
+          {"y", 10},
           {"w", 600},
-          {"h", 600}}}};
-
-    messagesList[1] = {
-        {"messageType", 4},
+          {"h", 600}}}}; */
+    messagesList[0] = {
+        {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
           {"args", ""},
-          {"x", 200},
+          {"x", 700},
           {"y", 50},
           {"w", 400},
           {"h", 400}}}};
-    messagesList[2] = {
-        {"messageType", 4},
-        {"payload",
-         {{"path", "/usr/bin/gnome-calculator"},
-          {"args", ""},
-          {"x", 500},
-          {"y", 100},
-          {"w", 400},
-          {"h", 400}}}};
-    messagesList[3] = {
-        {"messageType", 5},
-        {"payload", ""}};
-    messagesList[4] = {
-        {"messageType", 4},
-        {"payload",
-         {{"path", "/usr/bin/gnome-calculator"},
-          {"args", ""},
-          {"x", 500},
-          {"y", 100},
-          {"w", 400},
-          {"h", 400}}}};
-    messagesList[5] = {
-        {"messageType", 5},
-        {"payload", ""}};
+    /* messagesList[2] = {
+         {"messageType", "StartApp"},
+         {"payload",
+          {{"path", "/usr/bin/gnome-calculator"},
+           {"x", 500},
+           {"y", 100},
+           {"w", 400},
+           {"h", 400}}}}; */
+    /* messagesList[3] = {
+         {"messageType", "StopApps"},
+         {"payload", ""}}; */
+    /* messagesList[4] = {
+         {"messageType", "StartApp"},
+         {"payload",
+          {{"path", "/usr/bin/gnome-calculator"},
+           {"args", ""},
+           {"x", 500},
+           {"y", 100},
+           {"w", 400},
+           {"h", 400}}}}; */
+    /* messagesList[5] = {
+         {"messageType", "StopApps"},
+         {"payload", ""}}; */
 
-    for (int i = 0; i < 6; i++)
+    struct timespec delay;
+    delay.tv_nsec = 0;
+    delay.tv_sec = 2;
+
+    for (int i = 0; i < numOfMessages; i++)
     {
         // Parse JSON message
         try
@@ -537,18 +671,25 @@ int main()
             json message = messagesList[i];
 
             // Check if it's a 'StartApp' message
-            if (message["messageType"] == START_APP)
+            if (message["messageType"] == "StartApp")
             {
                 std::string payloadStr = message["payload"].dump();
 
-                runningApplication appD;
-                parseJSONMessage(payloadStr, errorCode, appD);
-                runApplicationResizeReposition(appD);
+                try
+                {
+                    runningApplication appD;
+                    parseJSONMessage(payloadStr, errorCode, appD);
+                    runApplicationResizeReposition(appD);
 
-                vectorOfRunningApps.push_back(appD);
+                    vectorOfRunningApps.push_back(appD);
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "Error parsing JSON payload data field in message: " << e.what() << std::endl;
+                }
             }
             // Handles Kill processes/shurt down apps message from the master app
-            else if (message["messageType"] == KILL_APP)
+            else if (message["messageType"] == "StopApps")
             {
                 for (int i = 0; i < vectorOfRunningApps.size(); i++)
                 {
@@ -556,17 +697,20 @@ int main()
                     cout << strerror(errno) << endl;
                 }
 
-                cout << "processes killed" << endl;
+                cout << "processes killed\n" << endl;
+                cout << "\nDeleting Firefox User Profiles in the directory \"usr/firefoxProfiles/\"." << endl;
+                cout << executeCommand("rm -r usr/firefoxProfiles/*");
             }
+
+            nanosleep(&delay, nullptr);
         }
         catch (const std::exception &e)
         {
             std::cerr << "Error parsing JSON message: " << e.what() << std::endl;
         }
     }
-    cout << "done" << endl;
 
     return 0;
 }
-*/
+
 // done
