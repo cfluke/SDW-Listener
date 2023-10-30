@@ -170,7 +170,7 @@ void runApplicationResizeReposition(runningApplication &app)
 
     string command, response, windowID;
     string windowIDAfterNewLineStrip;
-    char error[1000];
+    char errorMsg[1000];
     timespec *c = NULL;
     pid_t pid;
     pid_t newlyLaunchedProcessPid = 0;
@@ -205,8 +205,9 @@ void runApplicationResizeReposition(runningApplication &app)
 
         if (execv(app.applicationPath.c_str(), args) == -1)
         {
-            sprintf(error, "\nLaunching application at: \"%s\" failed. launching application error (from function \"execv()\"): %s", app.applicationPath.c_str(), strerror(errno));
-            throw std::invalid_argument(error);
+          //  sprintf(errorMsg, "\nLaunching application at: \"%s\" failed. launching application error (from function \"execv()\"): %s", app.applicationPath.c_str(), strerror(errno));
+          //  throw std::invalid_argument(errorMsg);
+          printf("error when trying to launch app.");
         }
 
         exit(0);
@@ -227,21 +228,8 @@ void runApplicationResizeReposition(runningApplication &app)
         app.applicationProcessId = pid;
         newlyLaunchedProcessPid = pid;
         sprintf(newlyLaunchedProcessPidAsString, "%d", newlyLaunchedProcessPid);
-        /*
-        pid_t ret = waitpid(newlyLaunchedProcessPid, &status, WNOHANG);
-        while(waitpid(newlyLaunchedProcessPid, &status, WNOHANG) == 0)
-        {
-            nanosleep(&delay, c);
-        }
-        ret = waitpid(newlyLaunchedProcessPid, &status, WNOHANG);
-        if (ret > 0)
-        {
-
-            if (WIFEXITED(status) && !WEXITSTATUS(status))
-            {
-                printf("program execution successful\n");
-        */
-        strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
+        
+        strcpy(commandFinal, "xdotool search --sync --onlyvisible --pid ");
         strcat(commandFinal, newlyLaunchedProcessPidAsString);
         // cout << commandFinal << endl;
         //    command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
@@ -264,9 +252,9 @@ void runApplicationResizeReposition(runningApplication &app)
             nanosleep(&delay, c);
         }
 
-        if (windowID < 2) {
-            sprintf(error, "\nError finding window ID for launched application: \"%s\" failed. Window ID search timed out, potential fix: increase value of \"TIMEOUT_VALUE_NANOSECONDS\" const in listener app.\n", app.applicationPath.c_str());
-            throw std::invalid_argument(error);
+        if (windowID.length() < 2) {
+            sprintf(errorMsg, "\nError finding window ID for launched application: \"%s\" failed. Window ID search timed out, potential fix: increase value of \"TIMEOUT_VALUE_NANOSECONDS\" const in listener app.\n", app.applicationPath.c_str());
+            throw std::invalid_argument(errorMsg);
         }
         // cout << "window ID: " << windowID << endl;
         windowIDAfterNewLineStrip = windowID;
@@ -275,7 +263,7 @@ void runApplicationResizeReposition(runningApplication &app)
         // cout << "windowIDAfterNewLineStrip:\t" << windowIDAfterNewLineStrip << endl;
         app.windowId = windowIDAfterNewLineStrip;
 
-        strcpy(commandFinal, "xdotool windowsize ");
+        strcpy(commandFinal, "xdotool windowsize --sync ");
         strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
         strcat(commandFinal, " ");
         strcat(commandFinal, programSizeWidth);
@@ -286,7 +274,7 @@ void runApplicationResizeReposition(runningApplication &app)
         // cout << commandFinal << endl;
         response = executeCommand(commandFinal);
 
-        strcpy(commandFinal, "xdotool windowmove ");
+        strcpy(commandFinal, "xdotool windowmove --sync ");
         strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
         strcat(commandFinal, " ");
         strcat(commandFinal, programPositionX);
@@ -296,29 +284,7 @@ void runApplicationResizeReposition(runningApplication &app)
         // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
         // cout << commandFinal << endl;
         response = executeCommand(commandFinal);
-        /*
-        }
-        else if (WIFEXITED(status) && WEXITSTATUS(status))
-        {
-            if (WEXITSTATUS(status) == 127)
-            {
-
-                // execv failed
-                printf("execv failed\n");
-            }
-            else
-                printf("program terminated normally,"
-                       " but returned a non-zero status\n");
-        }
-        else
-            printf("program didn't terminate normally\n");
-    }
-    else
-    {
-        // waitpid() failed
-        printf("waitpid() failed\n");
-    }
-    */
+        
     }
     else if (pid == -1)
     {
@@ -363,6 +329,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    printf("\nSocket Connected.\n");
+
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(serverPort);
 
@@ -374,6 +342,8 @@ int main(int argc, char *argv[])
         printf("IP address conversion error: %s", strerror(errno));
         return -1;
     }
+
+    printf("\nIP address conversion to binary successful.\n");
 
     if ((status = connect(client_fd, (struct sockaddr *)&serv_addr,
                           sizeof(serv_addr))) < 0)
@@ -452,6 +422,7 @@ int main(int argc, char *argv[])
             displayDetailsObject1["h"] = 2160;
 
             // Create and populate the second DisplayDetails object
+            //resolution for SSA Lab:
             json displayDetailsObject2;
             displayDetailsObject2["x"] = 0;
             displayDetailsObject2["y"] = 2160;
