@@ -143,7 +143,7 @@ string executeCommand(string command)
     FILE *pipe = popen(command.c_str(), "r");
     if (!pipe)
     {
-        sprintf(error,"\nEncountered an error while executing a shell command: %s\n", strerror(errno));
+        sprintf(error, "\nEncountered an error while executing a shell command: %s\n", strerror(errno));
         throw std::invalid_argument(error);
 
         result = "";
@@ -160,8 +160,16 @@ string executeCommand(string command)
     return result;
 }
 
-void runApplicationResizeReposition(runningApplication &app)
+void runApplicationResizeReposition(runningApplication &app, vector<char *> &firefoxProfiles)
 {
+
+    struct timespec delay;
+
+    unsigned long int timeoutInNanoSeconds = TIMEOUT_VALUE_SECONDS * (unsigned long int)1000000000 + TIMEOUT_VALUE_NANOSECONDS;
+
+    // delay.tv_nsec = 0;
+    // delay.tv_sec = 2;
+
     char programPath[50];
     char programPositionX[50];
     char programPositionY[50];
@@ -184,11 +192,8 @@ void runApplicationResizeReposition(runningApplication &app)
     sprintf(programPositionX, "%d", app.applicationLocationX);
     sprintf(programPositionY, "%d", app.applicationLocationY);
 
-    pid = fork();
 
-    if (pid == 0)
-    {
-        // create char* array for execv()
+    // create char* array for execv()
 
         int n = app.args.size();
         char *args[n + 2];                                         // +1 for NULL
@@ -203,21 +208,52 @@ void runApplicationResizeReposition(runningApplication &app)
 
         // error = execl(app.applicationPath.c_str(),NULL);
 
+        // cout << "app path: " << app.applicationPath << endl;
+        std::size_t lastDash = app.applicationPath.find_last_of("/\\");
+        const char *application = app.applicationPath.substr(lastDash + 1).c_str();
+        // cout << "last dash position: " << lastDash << endl;
+
+        char firefoxCreateProfileCommand[1000];
+        // nanosleep(&delay, c);
+
+        if (strcmp(application, "firefox") == 0)
+        {
+            strcpy(firefoxCreateProfileCommand, "firefox -no-remote --CreateProfile \"");
+            strcat(firefoxCreateProfileCommand, app.args[app.args.size() - 1]);
+            strcat(firefoxCreateProfileCommand, " /mnt/nfs/home/localuser/SSALab/Listener/FirefoxProfile/");
+            strcat(firefoxCreateProfileCommand, app.args[app.args.size() - 1]);
+            strcat(firefoxCreateProfileCommand, "\"");
+            cout << "firefox profile creation command: " << endl;
+            cout << firefoxCreateProfileCommand << endl;
+            // std::string firefoxCreateProfile = "firefox --Create-Profile \"<profileID> /mnt/nfs/home/localuser/SSALab/Listener/FirefoxProfile/<profileID>/\"";
+            response = executeCommand(firefoxCreateProfileCommand);
+
+            firefoxProfiles.push_back(app.args[app.args.size() - 1]);
+            cout << "from resize function: "
+                 << "firefox profiles size: " << firefoxProfiles.size() << endl;
+            for (int i = 0; i < firefoxProfiles.size(); i++)
+            {
+                cout << "firefoxProfile: " << firefoxProfiles[i] << endl;
+            }
+        }
+
+    pid = fork();
+
+    if (pid == 0)
+    {
+        
+
         if (execv(app.applicationPath.c_str(), args) == -1)
         {
-          //  sprintf(errorMsg, "\nLaunching application at: \"%s\" failed. launching application error (from function \"execv()\"): %s", app.applicationPath.c_str(), strerror(errno));
-          //  throw std::invalid_argument(errorMsg);
-          printf("error when trying to launch app.");
+            //  sprintf(errorMsg, "\nLaunching application at: \"%s\" failed. launching application error (from function \"execv()\"): %s", app.applicationPath.c_str(), strerror(errno));
+            //  throw std::invalid_argument(errorMsg);
+            printf("error when trying to launch app.");
         }
 
         exit(0);
     }
 
     // TO DO: need to find a way to check if program has started yet, instead of waiting
-
-    struct timespec delay;
-
-    unsigned long int timeoutInNanoSeconds = TIMEOUT_VALUE_SECONDS * (unsigned long int)1000000000 + TIMEOUT_VALUE_NANOSECONDS;
 
     int status = 0;
 
@@ -228,8 +264,8 @@ void runApplicationResizeReposition(runningApplication &app)
         app.applicationProcessId = pid;
         newlyLaunchedProcessPid = pid;
         sprintf(newlyLaunchedProcessPidAsString, "%d", newlyLaunchedProcessPid);
-        
-        strcpy(commandFinal, "xdotool search --sync --onlyvisible --pid ");
+
+        strcpy(commandFinal, "xdotool search --onlyvisible --pid ");
         strcat(commandFinal, newlyLaunchedProcessPidAsString);
         // cout << commandFinal << endl;
         //    command = "xdotool search --onlyvisible --pid " + to_string(newlyLaunchedProcessPid);
@@ -252,7 +288,8 @@ void runApplicationResizeReposition(runningApplication &app)
             nanosleep(&delay, c);
         }
 
-        if (windowID.length() < 2) {
+        if (windowID.length() < 2)
+        {
             sprintf(errorMsg, "\nError finding window ID for launched application: \"%s\" failed. Window ID search timed out, potential fix: increase value of \"TIMEOUT_VALUE_NANOSECONDS\" const in listener app.\n", app.applicationPath.c_str());
             throw std::invalid_argument(errorMsg);
         }
@@ -273,6 +310,7 @@ void runApplicationResizeReposition(runningApplication &app)
         // command = "xdotool windowsize " + windowIDAfterNewLineStrip + " " + programSizeWidth + " " + programSizeHeight;
         // cout << commandFinal << endl;
         response = executeCommand(commandFinal);
+        cout << "windowsize command from Xdotool response: " << response << endl;
 
         strcpy(commandFinal, "xdotool windowmove --sync ");
         strcat(commandFinal, windowIDAfterNewLineStrip.c_str());
@@ -284,7 +322,8 @@ void runApplicationResizeReposition(runningApplication &app)
         // command = "xdotool windowmove " + windowIDAfterNewLineStrip + " " + programPositionX + " " + programPositionY;
         // cout << commandFinal << endl;
         response = executeCommand(commandFinal);
-        
+
+        cout << "Windowmove command from Xdotool response: " << response << endl;
     }
     else if (pid == -1)
     {
@@ -294,6 +333,37 @@ void runApplicationResizeReposition(runningApplication &app)
 }
 
 // Main function for Production
+
+void ListenerAppTerminationAndCleanUp(vector<runningApplication> vectorOfRunningApps, vector<char *> &firefoxProfiles)
+{
+
+    std::string errorCode;
+    char deleteFirefoxProfileCommand[1000];
+
+    cout << "Shutting down applications." << endl;
+
+    for (int i = 0; i < vectorOfRunningApps.size(); i++)
+    {
+        errorCode = kill(vectorOfRunningApps[i].applicationProcessId, SIGTERM);
+        cout << "killing Application: " << vectorOfRunningApps[i].applicationPath << "\n"
+             << strerror(errno) << endl;
+    }
+
+    cout << "Deleting Firefox profiles." << endl;
+
+    for (int i = 0; i < firefoxProfiles.size(); i++)
+    {
+        strcpy(deleteFirefoxProfileCommand, "rm -r /mnt/nfs/home/localuser/SSALab/Listener/FirefoxProfile/");
+        strcat(deleteFirefoxProfileCommand, firefoxProfiles[i]);
+
+        cout << "Deleting Firefox profile: " << firefoxProfiles[i] << endl;
+
+        executeCommand(deleteFirefoxProfileCommand);
+    }
+
+    cout << "Applications Shutdown and Firefox profiles deleted.\n"
+         << endl;
+}
 
 int main(int argc, char *argv[])
 {
@@ -319,6 +389,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in serv_addr;
 
     vector<runningApplication> vectorOfRunningApps;
+    vector<char *> firefoxProfiles; // vector to keep track of all created firefox profiles by the listener app.
 
     char buffer[1024] = {0};
     if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -422,7 +493,7 @@ int main(int argc, char *argv[])
             displayDetailsObject1["h"] = 2160;
 
             // Create and populate the second DisplayDetails object
-            //resolution for SSA Lab:
+            // resolution for SSA Lab:
             json displayDetailsObject2;
             displayDetailsObject2["x"] = 0;
             displayDetailsObject2["y"] = 2160;
@@ -476,6 +547,7 @@ int main(int argc, char *argv[])
     // Continuously listen for messages
 
     printf("\nListening for Messages.\n");
+
     while (true)
     {
         // Receive data
@@ -487,11 +559,15 @@ int main(int argc, char *argv[])
             if (bytesRecieved == 0)
             {
                 printf("\nMaster application has terminated connection. Exiting the program now \n");
+
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
             }
             else
             {
                 printf("Encountered an error when recieving the first 4 bytes from a command message via TCP from master application: %s", strerror(errno));
                 printf("\n. Exiting the program now. \n");
+
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
             }
 
             close(client_fd);
@@ -507,11 +583,15 @@ int main(int argc, char *argv[])
             if (bytesRecieved == 0)
             {
                 printf("\nMaster application has terminated connection. Exiting the program now \n");
+
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
             }
             else
             {
                 printf("Encountered an error when recieving a command message via TCP from master application: %s", strerror(errno));
                 printf("\n. Exiting the program now. \n");
+
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
             }
             close(client_fd);
             delete[] messageBuffer;
@@ -524,6 +604,9 @@ int main(int argc, char *argv[])
         {
             json message = json::parse(messageBuffer);
 
+            // cout << "TCP message: " << endl;
+            /// cout << message << endl;
+
             string messageType = message["messageType"];
 
             // Check if it's a 'StartApp' message
@@ -531,11 +614,11 @@ int main(int argc, char *argv[])
             {
                 std::string payloadStr = message["payload"];
 
-                 try
+                try
                 {
                     runningApplication appD;
                     parseJSONMessage(payloadStr, errorCode, appD);
-                    runApplicationResizeReposition(appD);
+                    runApplicationResizeReposition(appD, firefoxProfiles);
 
                     vectorOfRunningApps.push_back(appD);
                 }
@@ -547,15 +630,7 @@ int main(int argc, char *argv[])
             // Handles Kill processes/shut down apps message from the master app
             else if (messageType == "StopApps")
             {
-                for (int i = 0; i < vectorOfRunningApps.size(); i++)
-                {
-                    errorCode = kill(vectorOfRunningApps[i].applicationProcessId, SIGTERM);
-                    cout << strerror(errno) << endl;
-                }
-
-                cout << "processes killed\n" << endl;
-                cout << "\nDeleting Firefox User Profiles in the directory \"usr/firefoxProfiles/\"." << endl;
-                cout << executeCommand("rm -r usr/firefoxProfiles/*");
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
             }
             else
             {
@@ -585,55 +660,56 @@ int main()
     string errorCode;
 
     vector<runningApplication> vectorOfRunningApps;
+    vector<char *> firefoxProfiles;
 
-    int numOfMessages = 1;
+    int numOfMessages = 6;
     json messagesList[numOfMessages];
 
     messagesList[0] = {
         {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/firefox"},
-          {"args", "https://google.com/"},
+          {"args", "https://google.com -new-instance -p 12345678"},
           {"x", 000},
-          {"y", 10},
+          {"y", 000},
           {"w", 600},
-          {"h", 600}}}}; 
+          {"h", 600}}}};
     messagesList[1] = {
         {"messageType", "StartApp"},
         {"payload",
          {{"path", "/usr/bin/gnome-calculator"},
           {"args", ""},
-          {"x", 700},
-          {"y", 50},
+          {"x", 10},
+          {"y", 10},
+          {"w", 600},
+          {"h", 600}}}};
+    messagesList[2] = {
+        {"messageType", "StartApp"},
+        {"payload",
+         {{"path", "/usr/bin/gnome-calculator"},
+          {"args", ""},
+          {"x", 500},
+          {"y", 100},
           {"w", 400},
           {"h", 400}}}};
-     messagesList[2] = {
-         {"messageType", "StartApp"},
-         {"payload",
-          {{"path", "/usr/bin/gnome-calculator"},
-           {"x", 500},
-           {"y", 100},
-           {"w", 400},
-           {"h", 400}}}}; 
-     messagesList[3] = {
-         {"messageType", "StopApps"},
-         {"payload", ""}}; 
-     messagesList[4] = {
-         {"messageType", "StartApp"},
-         {"payload",
-          {{"path", "/usr/bin/gnome-calculator"},
-           {"args", ""},
-           {"x", 500},
-           {"y", 100},
-           {"w", 400},
-           {"h", 400}}}}; 
-     messagesList[5] = {
-         {"messageType", "StopApps"},
-         {"payload", ""}}; 
-
+    messagesList[3] = {
+        {"messageType", "StopApps"},
+        {"payload", ""}};
+    messagesList[4] = {
+        {"messageType", "StartApp"},
+        {"payload",
+         {{"path", "/usr/bin/gnome-calculator"},
+          {"args", ""},
+          {"x", 500},
+          {"y", 100},
+          {"w", 400},
+          {"h", 400}}}};
+    messagesList[5] = {
+        {"messageType", "StopApps"},
+        {"payload", ""}};
     struct timespec delay;
     delay.tv_nsec = 0;
-    delay.tv_sec = 2;
+    delay.tv_sec = 0;
 
     for (int i = 0; i < numOfMessages; i++)
     {
@@ -642,8 +718,13 @@ int main()
         {
             json message = messagesList[i];
 
+            // cout << "TCP message: " << endl;
+            /// cout << message << endl;
+
+            string messageType = message["messageType"];
+
             // Check if it's a 'StartApp' message
-            if (message["messageType"] == "StartApp")
+            if (messageType == "StartApp")
             {
                 std::string payloadStr = message["payload"].dump();
 
@@ -651,7 +732,7 @@ int main()
                 {
                     runningApplication appD;
                     parseJSONMessage(payloadStr, errorCode, appD);
-                    runApplicationResizeReposition(appD);
+                    runApplicationResizeReposition(appD, firefoxProfiles);
 
                     vectorOfRunningApps.push_back(appD);
                 }
@@ -659,22 +740,23 @@ int main()
                 {
                     std::cerr << "Error parsing JSON payload data field in message: " << e.what() << std::endl;
                 }
-            }
-            // Handles Kill processes/shurt down apps message from the master app
-            else if (message["messageType"] == "StopApps")
-            {
-                for (int i = 0; i < vectorOfRunningApps.size(); i++)
+
+                cout << "from main function: "
+                     << "firefox profiles size: " << firefoxProfiles.size() << endl;
+                for (int i = 0; i < firefoxProfiles.size(); i++)
                 {
-                    errorCode = kill(vectorOfRunningApps[i].applicationProcessId, SIGTERM);
-                    cout << strerror(errno) << endl;
+                    cout << "firefoxProfile: " << firefoxProfiles[i] << endl;
                 }
-
-                cout << "processes killed\n" << endl;
-                cout << "\nDeleting Firefox User Profiles in the directory \"usr/firefoxProfiles/\"." << endl;
-                cout << executeCommand("rm -r usr/firefoxProfiles/*");
             }
-
-            nanosleep(&delay, nullptr);
+            // Handles Kill processes/shut down apps message from the master app
+            else if (messageType == "StopApps")
+            {
+                ListenerAppTerminationAndCleanUp(vectorOfRunningApps, firefoxProfiles);
+            }
+            else
+            {
+                printf("Encountered an Error, \"%s\" was received as the message type which is an invalid value.\n", messageType.c_str());
+            }
         }
         catch (const std::exception &e)
         {
