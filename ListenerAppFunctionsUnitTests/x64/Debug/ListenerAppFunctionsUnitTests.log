@@ -1,0 +1,7 @@
+﻿  pch.cpp
+  test.cpp
+C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\ListenerAppFunctions\ListenerAppFunctions.cpp(190,21): warning C4101: 'delay': unreferenced local variable
+C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\ListenerAppFunctions\ListenerAppFunctions.cpp(150,10): warning C4101: 'commandFinal': unreferenced local variable
+C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\ListenerAppFunctions\ListenerAppFunctions.cpp(138,10): warning C4101: 'programPath': unreferenced local variable
+C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\ListenerAppFunctions\ListenerAppFunctions.cpp(149,10): warning C4101: 'newlyLaunchedProcessPidAsString': unreferenced local variable
+  ListenerAppFunctionsUnitTests.vcxproj -> C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\x64\Debug\ListenerAppFunctionsUnitTests.exe

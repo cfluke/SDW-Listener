@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\x64\Debug\ListenerAppFunctions.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\David\Desktop\uni work\sem2_2023\SEPB\ListenerApp\testing\ListenerAppFunctions\x64\Debug\ListenerAppFunctionsUnitTests.exe</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>
